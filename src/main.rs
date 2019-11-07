@@ -164,7 +164,7 @@ fn file_to_image(config: Config, file_path: PathBuf, pool: &ThreadPool, m: &Mult
                 .borrow()
                 .iter()
                 .zip(data.r.borrow().iter())
-                .map(|(&refl, &r)| if r <= 20.0 { refl } else { 0.0 })
+                .map(|(&refl, &r)| if r < config.range_max && r >= config.range_min { refl } else { 0.0 })
                 .sum::<f32>();
             let refl_len = data.refl.borrow().len() as f32;
             if refl_sum > 10000.0 || refl_sum < 0.0 {
