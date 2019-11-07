@@ -103,10 +103,11 @@ fn file_to_image(config: Config, file_path: PathBuf, pool: &ThreadPool, m: &Mult
         // Calculate parameters for image output
         let min_dist = config.range_min;
         let max_dist = config.range_max;
-        let range_dist = max_dist - min_dist;
+        // let range_dist = max_dist - min_dist;
         let project_to_range = 20;
         let pix_res = 0.1;
-        let x_size = ((2.0 * std::f32::consts::PI * max_dist as f32) / pix_res).floor() as u32;
+        let x_size = ((2.0 * std::f32::consts::PI * project_to_range as f32) / pix_res).floor() as u32;
+        println!("xSize: {}", x_size);
         let x_fact = x_size as f32 / 360.0;
         let max_zen = config.zen_max;
         let min_zen = config.zen_min;
