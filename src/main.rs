@@ -3,6 +3,7 @@ extern crate image;
 extern crate indicatif;
 extern crate threadpool;
 extern crate structopt;
+extern crate num_cpus;
 
 use structopt::StructOpt;
 use hancock_read_bin::HancockReader;
@@ -41,21 +42,33 @@ struct Opt {
     #[structopt(short = "Z", long, default_value = "120.0")]
     zen_max: f32,
 
+
+    /// Number of threads to run multiple files in parallel
+    #[structopt(short = "n", long, default_value = "0")]
+    n_threads: usize,
+
     /// Output file name
     #[structopt(short, long, parse(from_os_str))]
     output: PathBuf,
 
-    /// Input file list
+    /// Input file list space separated
     #[structopt(name = "FILE", parse(from_os_str))]
     inputs: Vec<PathBuf>,
 }
 
 fn main() -> io::Result<()> {
-    // create pool for multithreading on multiple files
-    let pool = ThreadPool::new(2);
-
     // Arguments parsing
     let opt = Opt::from_args();
+
+    // create pool for multithreading on multiple files
+    let n_threads;
+    if opt.n_threads == 0 {
+        let num_cpus = num_cpus::get();
+        n_threads = num_cpus - 1;
+    } else {
+        n_threads = opt.n_threads;
+    }
+    let pool = ThreadPool::new(n_threads);
 
     // Progress bar
     let m = MultiProgress::new();
@@ -137,8 +150,8 @@ fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiPr
             let loc_y = y_size - 1 - ((max_zen - abs_zen) * y_fact).floor() as u32;
             let index = (loc_x + (loc_y * x_size)) as usize;
             if index > total_size - 1 {
-                println!(
-                    "loc_x: {}, loc_y: {}, zen: {}, zen_tan: {}, az: {}",
+                panic!(
+                    "Error, cannot write to that index of the image!\nData: \nloc_x: {}, loc_y: {}, zen: {}, zen_tan: {}, az: {}",
                     loc_x, loc_y, data.zen, zen_tan, data.az
                 );
             }
