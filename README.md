@@ -1,4 +1,4 @@
-# tls_read_hancock_bin
+# tls_3d_to_2d
 
 CLI tool for transforming [Hancock terrestrial LiDAR binary polar format](https://bitbucket.org/StevenHancock/libclidar) to 2D image for quick inspection.
 
