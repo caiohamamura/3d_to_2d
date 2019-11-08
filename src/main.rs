@@ -47,7 +47,7 @@ impl Config {
             y_bot,
             x_size,
             y_size,
-            total_size: x_size * y_size as u32,
+            total_size: (x_size * y_size) as usize,
             zen_min: opt.zen_min,
             zen_max: opt.zen_max,
             sigma: opt.sigma,
