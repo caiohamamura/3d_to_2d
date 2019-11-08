@@ -15,6 +15,48 @@ use threadpool::ThreadPool;
 
 const TOL: f32 = 1e-4;
 
+#[derive(Clone)]
+struct Config {
+    output: PathBuf,
+    dist_min: f32,
+    dist_max: f32,
+    dist_mid: f32,
+    y_top: f32,
+    y_bot: f32,
+    x_size: u32,
+    y_size: u32,
+    total_size: usize,
+    zen_min: f32,
+    zen_max: f32,
+    sigma: f32,
+}
+
+impl Config {
+    pub fn new(opt: &Opt) -> Config {
+        // Calculate parameters for image output
+        let x_size = opt.width;
+        let y_top = calculate_y(x_size, opt.zen_min);
+        let y_bot = calculate_y(x_size, opt.zen_max);
+        let y_size = (y_top - y_bot + 1.0).floor() as u32;
+        Config {
+            output: opt.output.clone(),
+            dist_min: opt.dist_min,
+            dist_max: opt.dist_max,
+            dist_mid: (opt.dist_max + opt.dist_min)/2.0,
+            y_top,
+            y_bot,
+            x_size,
+            y_size,
+            total_size: x_size * y_size as u32,
+            zen_min: opt.zen_min,
+            zen_max: opt.zen_max,
+            sigma: opt.sigma,
+        }
+    }
+}
+    
+
+
 #[derive(StructOpt, Clone)]
 #[structopt(name = "3d_to_2d")]
 struct Opt {
@@ -64,6 +106,7 @@ struct Opt {
 fn main() -> io::Result<()> {
     // Arguments parsing
     let opt = Opt::from_args();
+    let config = Config::new(&opt);
 
     // create pool for multithreading on multiple files
     let n_threads;
@@ -85,7 +128,7 @@ fn main() -> io::Result<()> {
 
     // Loop through files and execute for each
     opt.clone().inputs.into_iter().for_each(|file_path| {
-        file_to_image(opt.clone(), file_path.clone(), &pool, &m, sty.clone());
+        file_to_image(config.clone(), file_path.clone(), &pool, &m, sty.clone());
     });
 
 
@@ -95,32 +138,18 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiProgress, sty: ProgressStyle) {
+fn file_to_image(config: Config, file_path: PathBuf, pool: &ThreadPool, m: &MultiProgress, sty: ProgressStyle) {
     let file_path_str = file_path.clone().into_os_string().into_string().unwrap();
-    let mut beam_reader = HancockReader::new(file_path_str.clone())
+    let beam_reader = HancockReader::new(file_path_str.clone())
         .unwrap_or_else(|err| panic!("Cannot open file: {}!", err));
 
     let pb = m.add(ProgressBar::new((beam_reader.n_beams) as u64));
     pb.set_style(sty);
 
     let _ = pool.execute(move || {
-        // Calculate parameters for image output
-        let min_dist = config.dist_min;
-        let max_dist = config.dist_max;
-        // let range_dist = max_dist - min_dist;
-        let x_size = config.width;
-        let max_zen = config.zen_max;
-        let min_zen = config.zen_min;
-        let y_top = calculate_y(x_size, min_zen);
-        let y_bot = calculate_y(x_size, max_zen);
-        let y_size = (y_top - y_bot + 1.0).floor() as u32;
-        let total_size = (x_size * y_size) as usize;
-        let sigma = config.sigma;
-        let mid_dist = (max_dist + min_dist)/2.0;
-
         // Declare image vector
-        let mut refl_matrix = vec![0.0f32; total_size];
-        let mut n_points = vec![0u32; total_size];
+        let mut refl_matrix = vec![0.0f32; config.total_size];
+        let mut n_points = vec![0u32; config.total_size];
 
         // Set progress bar
         pb.set_message("Processing file...");
@@ -130,56 +159,67 @@ fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiPr
                 pb.set_message(&format!("Processing file: {}", message));
             }
         } 
+        
+        // Filter by n_hits and zenith
+        let mut beam_iter = beam_reader.into_iter()
+            .filter(|data| {
+                data.n_hits > 0            && 
+                data.zen >= config.zen_min && 
+                data.zen < config.zen_max
+            });
+
         pb.set_position(0);
-
+        
         // Loop through all beams
-        while let Some(data) = beam_reader.next() {            
-            // Update progress bar
-            if beam_reader.current_beam % 10000 == 0 {
-                pb.set_position(beam_reader.current_beam as u64 + 1);
+        while let Some(data) = beam_iter.next() {            
+            // Update progress bar each 10000 beams
+            if data.shot_n % 10000 == 0 {
+                pb.set_position(data.shot_n as u64 + 1);
             }
 
-            if data.n_hits == 0 || data.zen < min_zen || data.zen > max_zen {
-                continue;
-            }
-
-            let loc_x = calculate_x(x_size, data.az).floor() as u32;
-            let loc_y = y_size - ((calculate_y(x_size, data.zen) - y_bot).floor() as u32) - 1;
-            let index = (loc_x + (loc_y * x_size)) as usize;
-            if index > total_size - 1 {
+            // Calculate indexes for x and y
+            let loc_x = calculate_x(config.x_size, data.az).floor() as u32;
+            let loc_y = config.y_size - ((calculate_y(config.x_size, data.zen) - config.y_bot).floor() as u32) - 1;
+            let index = (loc_x + (loc_y * config.x_size)) as usize;
+            
+            // Panic if by any reason the calculated index exceeds the array size
+            if index > config.total_size - 1 {
                 panic!(
                     "Error, cannot write to that index of the image!\nData: \nloc_x: {}, loc_y: {}, index: {}, max_index: {}, zen: {}, az: {}",
-                    loc_x, loc_y, index, total_size, data.zen, data.az
+                    loc_x, loc_y, index, config.total_size, data.zen, data.az
                 );
             }
-            let refl_sum = data
-                .refl
-                .borrow()
+
+            // Iterate through each of the reflectance and range values
+            // and return the sum
+            let refl_vector = data.refl.borrow();
+            let range_vector = data.r.borrow();
+
+            let refl_sum = refl_vector
                 .iter()
-                .zip(data.r.borrow().iter())
+                .zip(range_vector.iter())
                 .map(|(&refl, &r)| {
-                    let h_range = (90.0-data.zen).to_radians().cos()*r;
-                    if h_range < max_dist && h_range >= min_dist { 
-                        if sigma < TOL {
-                            refl
+                    // Compute horizontal distance (that is what we want!)
+                    let h_range = distance_from_zenith_range(data.zen, r);
+
+                    // Filter up by distance
+                    if h_range < config.dist_max && h_range >= config.dist_min { 
+                        // Gaussian smoothing if sigma has a value
+                        if config.sigma < TOL { 
+                            refl 
                         } else {
-                            refl * gaussian_smooth(h_range - mid_dist, sigma)
+                            refl * gaussian_smooth(h_range - config.dist_mid, config.sigma)
                         }
                      } else { 0.0 }
                 }).sum::<f32>();
-            let refl_len = data.refl.borrow().len() as f32;
-            if refl_sum > 10000.0 || refl_sum < 0.0 {
-                break;
-            }
 
-            if refl_matrix[index].is_nan() {
-                refl_matrix[index] = 0.0f32
-            }
-
-            refl_matrix[index] += refl_sum / (refl_len as f32);
-            n_points[index] += 1;
+            let point_count = refl_vector.len() as u32;
+            refl_matrix[index] += refl_sum;
+            n_points[index] += point_count;
         }
-        for i in 0..total_size {
+
+        // Reflectance values weighted by number of points
+        for i in 0..config.total_size {
             refl_matrix[i] /= n_points[i] as f32;
         }
 
@@ -194,8 +234,8 @@ fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiPr
         image::save_buffer(
             config.output,
             refl_matrix_u8.as_mut_slice(),
-            x_size,
-            y_size,
+            config.x_size,
+            config.y_size,
             image::Gray(8),
         )
         .unwrap();
@@ -214,8 +254,6 @@ fn calculate_x(width: u32, az: f32) -> f32 {
 use std::f32::consts::PI;
 
 fn calculate_y(width: u32, zen: f32) -> f32 {
-/// This function follows the same from mercator projection
-/// 
     // First transform to radians
     let phi = (90.0 - zen).to_radians();
     
@@ -229,6 +267,9 @@ fn gaussian_smooth(x: f32, sigma: f32) -> f32 {
     let inner_exp = x.powf(2.0) / sigma2.powf(2.0);
     let exp_part = (-inner_exp).exp();
     return fraction_part * exp_part;
+}
 
-    
+fn distance_from_zenith_range(zen: f32, r: f32) -> f32 {
+    let horizon_angle = (90.0 - zen).to_radians();
+    horizon_angle.cos() * r
 }
