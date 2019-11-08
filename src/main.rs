@@ -138,7 +138,7 @@ fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiPr
             if index > total_size - 1 {
                 panic!(
                     "Error, cannot write to that index of the image!\nData: \nloc_x: {}, loc_y: {}, index: {}, max_index: {}, zen: {}, az: {}",
-                    loc_x, loc_y, index, max_index, data.zen, data.az
+                    loc_x, loc_y, index, total_size, data.zen, data.az
                 );
             }
             let refl_sum = data
