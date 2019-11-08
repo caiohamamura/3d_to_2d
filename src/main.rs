@@ -146,8 +146,10 @@ fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiPr
                 .borrow()
                 .iter()
                 .zip(data.r.borrow().iter())
-                .map(|(&refl, &r)| if r < max_dist && r >= min_dist { refl } else { 0.0 })
-                .sum::<f32>();
+                .map(|(&refl, &r)| {
+                    let h_range = (90.0-data.zen).to_radians().cos()*r;
+                    if h_range < max_dist && h_range >= min_dist { refl } else { 0.0 }
+                }).sum::<f32>();
             let refl_len = data.refl.borrow().len() as f32;
             if refl_sum > 10000.0 || refl_sum < 0.0 {
                 break;
