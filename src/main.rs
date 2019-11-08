@@ -12,6 +12,9 @@ use std::io::{self};
 use std::path::PathBuf;
 use threadpool::ThreadPool;
 
+
+const TOL: f32 = 1e-4;
+
 #[derive(StructOpt, Clone)]
 #[structopt(name = "3d_to_2d")]
 struct Opt {
@@ -42,6 +45,12 @@ struct Opt {
     /// Number of threads to run multiple files in parallel
     #[structopt(short = "n", long, default_value = "0")]
     n_threads: usize,
+
+    
+    /// Sigma gaussian smoothing factor from range center
+    #[structopt(short, long, default_value = "0.0")]
+    sigma: f32,
+
 
     /// Output file name
     #[structopt(short, long, parse(from_os_str))]
@@ -106,6 +115,8 @@ fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiPr
         let y_bot = calculate_y(x_size, max_zen);
         let y_size = (y_top - y_bot + 1.0).floor() as u32;
         let total_size = (x_size * y_size) as usize;
+        let sigma = config.sigma;
+        let mid_dist = (max_dist + min_dist)/2.0;
 
         // Declare image vector
         let mut refl_matrix = vec![0.0f32; total_size];
@@ -148,7 +159,13 @@ fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiPr
                 .zip(data.r.borrow().iter())
                 .map(|(&refl, &r)| {
                     let h_range = (90.0-data.zen).to_radians().cos()*r;
-                    if h_range < max_dist && h_range >= min_dist { refl } else { 0.0 }
+                    if h_range < max_dist && h_range >= min_dist { 
+                        if sigma < TOL {
+                            refl
+                        } else {
+                            refl * gaussian_smooth(h_range - mid_dist, sigma)
+                        }
+                     } else { 0.0 }
                 }).sum::<f32>();
             let refl_len = data.refl.borrow().len() as f32;
             if refl_sum > 10000.0 || refl_sum < 0.0 {
@@ -204,4 +221,14 @@ fn calculate_y(width: u32, zen: f32) -> f32 {
     
     ((width as f32) / (PI*2.0)) *  
     ((PI/4.0 + phi/2.0).tan()).ln()
+}
+
+fn gaussian_smooth(x: f32, sigma: f32) -> f32 {
+    let sigma2 = sigma * 2.0;
+    let fraction_part = 1.0 / (PI * sigma2).sqrt();
+    let inner_exp = x.powf(2.0) / sigma2.powf(2.0);
+    let exp_part = (-inner_exp).exp();
+    return fraction_part * exp_part;
+
+    
 }
