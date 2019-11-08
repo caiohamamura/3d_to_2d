@@ -35,3 +35,7 @@ OPTIONS:
 ARGS:
     <file>...    Input file list space separated
 ```
+
+
+## Output example:
+![output sample image](doc/img/sample.png)
