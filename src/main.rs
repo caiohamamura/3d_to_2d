@@ -1,4 +1,4 @@
-extern crate hancock_read_bin;
+extern crate tls_read_hancock_bin;
 extern crate image;
 extern crate indicatif;
 extern crate threadpool;
@@ -6,7 +6,7 @@ extern crate structopt;
 extern crate num_cpus;
 
 use structopt::StructOpt;
-use hancock_read_bin::HancockReader;
+use tls_read_hancock_bin::HancockReader;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::io::{self};
 use std::path::PathBuf;
@@ -19,12 +19,8 @@ struct Opt {
     // be used for the help message of the flag. The name of the
     // argument will be, by default, based on the name of the field.
     /// Azimuth pixel resolution
-    #[structopt(short = "r", long, default_value = "0.2")]
-    res_az: f32,
-
-    /// Zenith pixel resolution
-    #[structopt(short = "R", long, default_value = "0.2")]
-    res_zen: f32,
+    #[structopt(short = "w", long, default_value = "1800")]
+    width: u32,
     
     /// Minimum distance
     #[structopt(short, long, default_value = "0.0", allow_hyphen_values = true)]
@@ -103,14 +99,12 @@ fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiPr
         let min_dist = config.dist_min;
         let max_dist = config.dist_max;
         // let range_dist = max_dist - min_dist;
-        let az_res = config.res_az;
-        let x_size = (360.0f32 / az_res).floor() as u32;
-        let x_fact = x_size as f32 / 360.0;
+        let x_size = config.width;
         let max_zen = config.zen_max;
         let min_zen = config.zen_min;
-        let zen_res = config.res_zen;
-        let y_size = ((max_zen-min_zen)/zen_res).floor() as u32;
-        let y_fact = y_size as f32 / (max_zen - min_zen);
+        let y_top = calculate_y(x_size, min_zen);
+        let y_bot = calculate_y(x_size, max_zen);
+        let y_size = (y_top - y_bot + 1.0).floor() as u32;
         let total_size = (x_size * y_size) as usize;
 
         // Declare image vector
@@ -128,31 +122,23 @@ fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiPr
         pb.set_position(0);
 
         // Loop through all beams
-        while let Some(data) = beam_reader.next() {
-            let zen = (data.zen).to_radians();
-            let mut zen_tan = zen.tan();
-            if zen_tan > 1e6 {
-                zen_tan = 1e6;
-            }
-
+        while let Some(data) = beam_reader.next() {            
             // Update progress bar
             if beam_reader.current_beam % 10000 == 0 {
                 pb.set_position(beam_reader.current_beam as u64 + 1);
             }
 
-
-            let abs_zen = data.zen.abs();
-            if data.n_hits == 0 || abs_zen < min_zen || abs_zen > max_zen {
+            if data.n_hits == 0 || data.zen < min_zen || data.zen > max_zen {
                 continue;
             }
 
-            let loc_x = ((data.az + 180.0) * x_fact).floor() as u32;
-            let loc_y = y_size - 1 - ((max_zen - abs_zen) * y_fact).floor() as u32;
+            let loc_x = calculate_x(x_size, data.az).floor() as u32;
+            let loc_y = y_size - ((calculate_y(x_size, data.zen) - y_bot).floor() as u32) - 1;
             let index = (loc_x + (loc_y * x_size)) as usize;
             if index > total_size - 1 {
                 panic!(
-                    "Error, cannot write to that index of the image!\nData: \nloc_x: {}, loc_y: {}, zen: {}, zen_tan: {}, az: {}",
-                    loc_x, loc_y, data.zen, zen_tan, data.az
+                    "Error, cannot write to that index of the image!\nData: \nloc_x: {}, loc_y: {}, index: {}, max_index: {}, zen: {}, az: {}",
+                    loc_x, loc_y, index, max_index, data.zen, data.az
                 );
             }
             let refl_sum = data
@@ -197,4 +183,23 @@ fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiPr
 
         pb.finish_with_message("done!");
     });
+}
+
+
+fn calculate_x(width: u32, az: f32) -> f32 {
+    let shift_az = az + 180.0;
+    (width as f32) * (shift_az / 360.0)
+}
+
+
+use std::f32::consts::PI;
+
+fn calculate_y(width: u32, zen: f32) -> f32 {
+/// This function follows the same from mercator projection
+/// 
+    // First transform to radians
+    let phi = (90.0 - zen).to_radians();
+    
+    ((width as f32) / (PI*2.0)) *  
+    ((PI/4.0 + phi/2.0).tan()).ln()
 }

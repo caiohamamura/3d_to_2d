@@ -13,12 +13,11 @@ categories = ["science"]
 
 
 [dependencies]
-hancock_read_bin = { git = "https://github.com/caiohamamura/rs_hancock_read_bin", branch="master" }
+tls_read_hancock_bin = "0.1.1"
 indicatif = "0.12.0"
 structopt = { version = "^0.3" }
 threadpool = "1.0"
 image = "0.22.3"
 num_cpus = "1.0"
-
 
 [build-dependencies]
