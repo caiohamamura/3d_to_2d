@@ -2,37 +2,43 @@ extern crate hancock_read_bin;
 extern crate image;
 extern crate indicatif;
 extern crate threadpool;
+extern crate structopt;
 
+use structopt::StructOpt;
 use hancock_read_bin::HancockReader;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use std::fs::File;
-use std::io::BufWriter;
 use std::io::{self};
-use std::path::Path;
 use std::path::PathBuf;
-use structopt::StructOpt;
 use threadpool::ThreadPool;
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Clone)]
 #[structopt(name = "3d_to_2d")]
 struct Opt {
     // A flag, true if used in the command line. Note doc comment will
     // be used for the help message of the flag. The name of the
     // argument will be, by default, based on the name of the field.
-    /// Minimum range
-    #[structopt(short, long, default_value = "0.0")]
-    range_min: f32,
+    /// Azimuth pixel resolution
+    #[structopt(short = "r", long, default_value = "0.2")]
+    res_az: f32,
 
-    /// Maximum range
-    #[structopt(short = "R", long, default_value = "20.0")]
-    range_max: f32,
+    /// Zenith pixel resolution
+    #[structopt(short = "R", long, default_value = "0.2")]
+    res_zen: f32,
+    
+    /// Minimum distance
+    #[structopt(short, long, default_value = "0.0", allow_hyphen_values = true)]
+    dist_min: f32,
+
+    /// Maximum distance
+    #[structopt(short = "D", long, default_value = "20.0")]
+    dist_max: f32,
 
     /// Minimum zenith
-    #[structopt(short, long, default_value = "20.0")]
+    #[structopt(short, long, default_value = "30.0")]
     zen_min: f32,
 
     /// Maximum zenith
-    #[structopt(short = "Z", long, default_value = "96.0")]
+    #[structopt(short = "Z", long, default_value = "120.0")]
     zen_max: f32,
 
     /// Output file name
@@ -44,31 +50,12 @@ struct Opt {
     inputs: Vec<PathBuf>,
 }
 
-#[derive(Clone)]
-struct Config {
-    range_min: f32,
-    range_max: f32,
-    zen_min: f32,
-    zen_max: f32,
-    inputs: Vec<PathBuf>,
-    output: PathBuf,
-}
-
 fn main() -> io::Result<()> {
     // create pool for multithreading on multiple files
     let pool = ThreadPool::new(2);
 
     // Arguments parsing
     let opt = Opt::from_args();
-
-    let config = Config {
-        range_min: opt.range_min,
-        range_max: opt.range_max,
-        zen_min: opt.zen_min,
-        zen_max: opt.zen_max,
-        inputs: opt.inputs,
-        output: opt.output,
-    };
 
     // Progress bar
     let m = MultiProgress::new();
@@ -79,8 +66,8 @@ fn main() -> io::Result<()> {
         .progress_chars("#>-");
 
     // Loop through files and execute for each
-    config.clone().inputs.into_iter().for_each(|file_path| {
-        file_to_image(config.clone(), file_path.clone(), &pool, &m, sty.clone());
+    opt.clone().inputs.into_iter().for_each(|file_path| {
+        file_to_image(opt.clone(), file_path.clone(), &pool, &m, sty.clone());
     });
 
 
@@ -90,30 +77,26 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn file_to_image(config: Config, file_path: PathBuf, pool: &ThreadPool, m: &MultiProgress, sty: ProgressStyle) {
+fn file_to_image(config: Opt, file_path: PathBuf, pool: &ThreadPool, m: &MultiProgress, sty: ProgressStyle) {
     let file_path_str = file_path.clone().into_os_string().into_string().unwrap();
     let mut beam_reader = HancockReader::new(file_path_str.clone())
         .unwrap_or_else(|err| panic!("Cannot open file: {}!", err));
 
     let pb = m.add(ProgressBar::new((beam_reader.n_beams) as u64));
-    println!("Number of shots: {}", beam_reader.n_beams);
     pb.set_style(sty);
 
     let _ = pool.execute(move || {
         // Calculate parameters for image output
-        let min_dist = config.range_min;
-        let max_dist = config.range_max;
+        let min_dist = config.dist_min;
+        let max_dist = config.dist_max;
         // let range_dist = max_dist - min_dist;
-        let project_to_range = 20;
-        let pix_res = 0.1;
-        let x_size = ((2.0 * std::f32::consts::PI * project_to_range as f32) / pix_res).floor() as u32;
-        println!("xSize: {}", x_size);
+        let az_res = config.res_az;
+        let x_size = (360.0f32 / az_res).floor() as u32;
         let x_fact = x_size as f32 / 360.0;
         let max_zen = config.zen_max;
         let min_zen = config.zen_min;
-        let y_top = ((90.0 - min_zen).to_radians().tan() * project_to_range as f32).floor() as u32;
-        let y_bot = ((max_zen - 90.0).to_radians().tan() * project_to_range as f32).floor() as u32;
-        let y_size = ((y_top + y_bot) as f32 / pix_res).floor() as u32;
+        let zen_res = config.res_zen;
+        let y_size = ((max_zen-min_zen)/zen_res).floor() as u32;
         let y_fact = y_size as f32 / (max_zen - min_zen);
         let total_size = (x_size * y_size) as usize;
 
@@ -164,7 +147,7 @@ fn file_to_image(config: Config, file_path: PathBuf, pool: &ThreadPool, m: &Mult
                 .borrow()
                 .iter()
                 .zip(data.r.borrow().iter())
-                .map(|(&refl, &r)| if r < config.range_max && r >= config.range_min { refl } else { 0.0 })
+                .map(|(&refl, &r)| if r < max_dist && r >= min_dist { refl } else { 0.0 })
                 .sum::<f32>();
             let refl_len = data.refl.borrow().len() as f32;
             if refl_sum > 10000.0 || refl_sum < 0.0 {
