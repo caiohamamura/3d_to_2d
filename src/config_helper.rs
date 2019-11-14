@@ -44,10 +44,10 @@ impl Config {
             zen_min: opt.zen_min,
             zen_max: opt.zen_max,
             sigma: opt.sigma,
-            from_dist: opt.from_dist,
-            to_dist: opt.to_dist,
-            total_frames: opt.total_frames,
-            range_view: opt.range_view,
+            from_dist: opt.mult_dist_from,
+            to_dist: opt.mult_dist_to,
+            total_frames: opt.mult_frames,
+            range_view: opt.mult_range_view,
             split: opt.split,
         }
     }
@@ -81,21 +81,21 @@ pub struct Opt {
     #[structopt(short = "Z", long, default_value = "120.0")]
     zen_max: f32,
 
-    /// From distance
+    /// From distance (multiple images, see readme)
     #[structopt(short = "f", long, default_value = "-1.0")]
-    from_dist: f32,
+    mult_dist_from: f32,
 
-    /// To distance
+    /// To distance (multiple images, see README)
     #[structopt(short = "F", long, default_value = "-1.0")]
-    to_dist: f32,
+    mult_dist_to: f32,
 
-    /// Total frames
+    /// Total frames (multiple images, see README)
     #[structopt(short = "t", long, default_value = "120")]
-    pub total_frames: u32,
+    pub mult_frames: u32,
     
-    /// Range view
+    /// Range view (multiple images, see README)
     #[structopt(short = "V", long, default_value = "6.0")]
-    range_view: f32,
+    mult_range_view: f32,
 
     // Progress
     #[structopt(short = "p", long)]
@@ -111,7 +111,7 @@ pub struct Opt {
     #[structopt(short, long, default_value = "0.0")]
     sigma: f32,
 
-    /// Save splitted gauss weights and reflectance
+    /// Save splitted gauss weights and reflectance images (see README)
     #[structopt(short = "S", long)]
     split: bool,
 

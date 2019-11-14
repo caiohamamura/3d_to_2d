@@ -51,14 +51,14 @@ fn main() -> io::Result<()> {
                 let mut opt2 = opt.clone();
                 opt2.dist_min = begin;
                 opt2.dist_max = end;
-                let n_digits = (opt2.total_frames as f64).log10().ceil() as usize;
+                let n_digits = (opt2.mult_frames as f64).log10().ceil() as usize;
                 opt2.output = opt2.output.with_extension(format!("{:0fill$}.png", i, fill = n_digits));
                 let config2 = Config::new(&opt2);
-                file_to_image(config2, file_path.clone(), &pool, &progress_handler);
+                tls_3d_to_2d(config2, file_path.clone(), &pool, &progress_handler);
                 }
             }
         else {
-            file_to_image(config.clone(), file_path.clone(), &pool, &progress_handler);
+            tls_3d_to_2d(config.clone(), file_path.clone(), &pool, &progress_handler);
         }
     });
 
@@ -66,7 +66,7 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn file_to_image(config: Config, file_path: PathBuf, pool: &ThreadPool, m: &ProgressBarWrapper) {
+fn tls_3d_to_2d(config: Config, file_path: PathBuf, pool: &ThreadPool, m: &ProgressBarWrapper) {
     let file_path_str = file_path.clone().into_os_string().into_string().unwrap();
     let beam_reader = HancockReader::new(file_path_str.clone())
         .unwrap_or_else(|err| panic!("Cannot open file: {}!", err));

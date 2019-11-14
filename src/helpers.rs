@@ -1,10 +1,10 @@
 use std::f32::consts::PI;
 
-pub fn calculate_y(width: u32, zen: f32) -> f32 {
-    // First transform to radians
-    let phi = (90.0 - zen).to_radians();
+const PI2: f32 = PI*2.0;
+const PI_DIV_360: f32 = PI/360.0;
 
-    ((width as f32) / (PI * 2.0)) * ((PI / 4.0 + phi / 2.0).tan()).ln()
+pub fn calculate_y(width: u32, zen: f32) -> f32 {
+    ((width as f32) / PI2) * (zen * PI_DIV_360).tan().recip().ln()
 }
 
 pub fn calculate_x(width: u32, az: f32) -> f32 {
