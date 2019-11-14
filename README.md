@@ -23,7 +23,7 @@ Where:
 
     tls_3d_to_2d -z 35 -Z 125 -d 0 -D 40 --output output.png input_file.bin
 
-It will project the cloud point from 0 to 40 meters horizontal distance from sensor and from 35 to 125 degrees of zenith. If min zenith is 0 degrees, it will lead to the calculation of tan(90 degrees) which is infinity thus leading the program to panic.
+It will project the cloud point from 0 to 40 meters horizontal distance from sensor and from 35 to 125 degrees of zenith. If min zenith is 0 degrees, it will lead to the calculation of cot(0 degrees) which is infinity thus leading the program to panic.
 
 
 ### Multiple frames
