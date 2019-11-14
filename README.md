@@ -16,6 +16,7 @@ Where:
 * ![Phi](doc/img/formula_phi.png): azimuth in degrees
 * ![Theta](doc/img/formula_theta.png): zenith in degrees
 
+From those equations we can project `x` and `y` coordinates to a gridded image, the pixel values will correspond to the average of the reflectance values of all pixels belonging to that cell.
 
 ## Usage
 
@@ -39,6 +40,7 @@ It will output 120 frames (`--mult-frames 120`) walking from distance 0 (`--mult
     1. Let `i` be the mid distance
     1. Calculate minimum distance: `i - (range_view/2)`
     1. Calculate maximum distance: `i + (range_view/2)`
+    1. Project to 2D the points between minimum and maximum distances
     1. Do gaussian smooth by horizontal distance: mean = `i` and sigma defined by `--sigma or -s OPTION`
     1. Create an image as `OUTPUT_NAME.{n}.png`, where `{n}` will be replaced by numbers from 0 to 119 for each step.
 
