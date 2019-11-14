@@ -6,7 +6,7 @@ CLI tool for transforming [Hancock terrestrial LiDAR binary polar format](https:
 
 This tool will project the 3D TLS polar point format to 2D format. The projection considers the point cloud as approximately spherical around the sensor, and projects it to a cylinder, just like the mercator projection. So the equations for calculating x and y are:
 
-![x equation](http://bit.ly/2phuyE5)
+![x equation](http://www.sciweavers.org/tex2img.php?eq=x%20%3D%20W%20\frac{\phi}{360%20^{\circ}}%20%20&bc=White&fc=Black&im=jpg&fs=12&ff=arev&edit=)
 
 ![y equation](http://bit.ly/374LdMo)
 
